@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Send Money</title>
+
+    <link rel="stylesheet" href="style.css">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap"
+          rel="stylesheet">
+
+</head>
+
+<body>
+
+<div class="container">
+
+    <div class="page-header">
+
+        <a href="../dashboard/index.html" class="back-button">
+            ←
+        </a>
+
+        <h2>Send Money</h2>
+
+    </div>
+
+    <form id="transferForm">
+
+        <label for="recipient">Recipient</label>
+
+        <input
+            type="text"
+            id="recipient"
+            placeholder="Enter account number or username">
+
+        <label for="amount">Amount</label>
+
+        <input
+            type="number"
+            id="amount"
+            placeholder="₦0.00">
+
+        <label for="note">Narration (Optional)</label>
+
+        <input
+            type="text"
+            id="note"
+            placeholder="What's this payment for?">
+
+        <button type="submit">
+            Continue
+        </button>
+
+    </form>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
