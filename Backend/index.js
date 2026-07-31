@@ -1,8 +1,14 @@
-const express = require("express");
+require("dotenv").config();
 
-const users = [];
+const express = require("express");
+const pool = require("./db");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const auth = require("./middleware/auth");
 
 const app = express();
+
+app.use(express.json());
 
 app.get("/", (req, res) => {
     res.json({
@@ -12,68 +18,16 @@ app.get("/", (req, res) => {
     });
 });
 
-app.get("/user", (req, res) => {
-    res.json({
-        name: "Goodluck Isaac",
-        app: "GoodPay",
-        balance: 250000
-    });
-});
+// REGISTER USER
+app.post("/register", async (req, res) => {
+    const { name, email, password } = req.body;
 
-app.use(express.json());
-
-app.post("/register", (req, res) => {
-    const user = req.body;
-
-    if (!user.name) {
+    if (!name) {
         return res.json({
             success: false,
             message: "Name is required."
         });
     }
-
-    if (!user.email) {
-        return res.json({
-            success: false,
-            message: "Email is required."
-        });
-    }
-
-    if (!user.password) {
-        return res.json({
-            success: false,
-            message: "Password is required."
-        });
-    }
-
-    users.push(user);
-
-    res.json({
-        success: true,
-        message: "User registered successfully!",
-        data: user
-    });
-});
-
-app.post("/login", (req, res) => {
-
-    const { email, password } = req.body;
-
-    const user = users.find((user) => user.email === email);
-
-    if (!user) {
-    return res.json({
-        success: false,
-        message: "User not found."
-    });
-}
-
-if (user.password !== password) {
-    return res.json({
-        success: false,
-        message: "Incorrect password."
-    });
-}
 
     if (!email) {
         return res.json({
@@ -89,16 +43,456 @@ if (user.password !== password) {
         });
     }
 
+    try {
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Save the new user and return the created record
+        const userResult = await pool.query(
+            `INSERT INTO users (name, email, password)
+             VALUES ($1, $2, $3)
+             RETURNING id`,
+            [name, email, hashedPassword]
+        );
+
+        const userId = userResult.rows[0].id;
+
+        // Create wallet for the new user
+        await pool.query(
+            `INSERT INTO wallets (user_id)
+             VALUES ($1)`,
+            [userId]
+        );
+
+        res.json({
+            success: true,
+            message: "User registered successfully!"
+        });
+
+    } catch (error) {
+        res.json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// LOGIN USER
+app.post("/login", async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Email is required."
+        });
+    }
+
+    if (!password) {
+        return res.json({
+            success: false,
+            message: "Password is required."
+        });
+    }
+
+    try {
+        const result = await pool.query(
+            "SELECT * FROM users WHERE email = $1",
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const user = result.rows[0];
+
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            return res.json({
+                success: false,
+                message: "Incorrect password."
+            });
+        }
+
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: "1h"
+            }
+        );
+
+        res.json({
+            success: true,
+            message: "Login successful!",
+            token: token
+        });
+
+    } catch (error) {
+        res.json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+// DEPOSIT MONEY
+app.post("/deposit", auth, async (req, res) => {
+
+    const { amount } = req.body;
+
+    if (!amount) {
+        return res.json({
+            success: false,
+            message: "Amount is required."
+        });
+    }
+
+    if (amount <= 0) {
+        return res.json({
+            success: false,
+            message: "Amount must be greater than zero."
+        });
+    }
+
+    try {
+
+        await pool.query(
+            `UPDATE wallets
+             SET balance = balance + $1
+             WHERE user_id = $2`,
+            [amount, req.user.id]
+        );
+
+        const wallet = await pool.query(
+            `SELECT balance
+             FROM wallets
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Deposit successful!",
+            data: {
+                balance: wallet.rows[0].balance
+            }
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+});
+
+// TRANSFER MONEY
+app.post("/transfer", auth, async (req, res) => {
+
+    const { email, amount, pin } = req.body;
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Receiver email is required."
+        });
+    }
+
+    if (!amount) {
+        return res.json({
+            success: false,
+            message: "Amount is required."
+        });
+    }
+
+    if (amount <= 0) {
+        return res.json({
+            success: false,
+            message: "Amount must be greater than zero."
+        });
+    }
+
+    if (!pin) {
+    return res.json({
+        success: false,
+        message: "Transaction PIN is required."
+    });
+}
+    try {
+
+const senderResult = await pool.query(
+    "SELECT * FROM users WHERE id = $1",
+    [req.user.id]
+);
+
+const sender = senderResult.rows[0];
+
+const pinMatch = await bcrypt.compare(pin, sender.pin);
+
+if (!pinMatch) {
+    return res.json({
+        success: false,
+        message: "Incorrect transaction PIN."
+    });
+}
+
+const receiverResult = await pool.query(
+    "SELECT * FROM users WHERE email = $1",
+    [email]
+);
+
+if (receiverResult.rows.length === 0) {
+    return res.json({
+        success: false,
+        message: "Receiver not found."
+    });
+}
+
+const receiver = receiverResult.rows[0];
+
+if (receiver.id === req.user.id) {
+    return res.json({
+        success: false,
+        message: "You cannot transfer money to yourself."
+    });
+}
+
+const senderWalletResult = await pool.query(
+    "SELECT * FROM wallets WHERE user_id = $1",
+    [req.user.id]
+);
+
+const senderWallet = senderWalletResult.rows[0];
+
+// Check if sender has enough balance
+if (Number(senderWallet.balance) < Number(amount)) {
+    return res.json({
+        success: false,
+        message: "Insufficient balance."
+    });
+}
+
+await pool.query("BEGIN");
+
+await pool.query(
+    `UPDATE wallets
+     SET balance = balance - $1
+     WHERE user_id = $2`,
+    [amount, req.user.id]
+);
+
+const updatedSenderWallet = await pool.query(
+    `SELECT balance
+     FROM wallets
+     WHERE user_id = $1`,
+    [req.user.id]
+);
+
+await pool.query(
+    `UPDATE wallets
+     SET balance = balance + $1
+     WHERE user_id = $2`,
+    [amount, receiver.id]
+);
+
+const receiverWallet = await pool.query(
+    `SELECT balance
+     FROM wallets
+     WHERE user_id = $1`,
+    [receiver.id]
+);
+
+await pool.query(
+    `INSERT INTO transactions
+     (sender_id, receiver_id, amount, type)
+     VALUES ($1, $2, $3, $4)`,
+    [
+        req.user.id,
+        receiver.id,
+        amount,
+        "transfer"
+    ]
+);
+
+await pool.query("COMMIT");
+
+res.json({
+    success: true,
+    message: "Receiver credited successfully.",
+    data: {
+        senderBalance: updatedSenderWallet.rows[0].balance,
+        receiverBalance: receiverWallet.rows[0].balance
+    }
+});
+
+    } catch (error) {
+
+    await pool.query("ROLLBACK");
+
     res.json({
-        success: true,
-        message: "Login successful!"
+        success: false,
+        message: error.message
     });
 
+}
+
 });
 
-app.get("/users", (req, res) => {
-    res.json(users);
+// GET ALL USERS (Protected)
+app.get("/users", auth, async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            "SELECT * FROM users"
+        );
+
+        res.json(result.rows);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
 });
+
+// GET LOGGED-IN USER PROFILE
+app.get("/profile", auth, async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            "SELECT id, name, email FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        res.json(result.rows[0]);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+});
+
+// CREATE TRANSACTION PIN
+app.post("/create-pin", auth, async (req, res) => {
+
+    const { pin } = req.body;
+
+    if (!pin) {
+        return res.json({
+            success: false,
+            message: "PIN is required."
+        });
+    }
+
+    // PIN must be exactly 4 digits
+    if (!/^\d{4}$/.test(pin)) {
+        return res.json({
+            success: false,
+            message: "PIN must be exactly 4 digits."
+        });
+    }
+
+    try {
+
+        const hashedPin = await bcrypt.hash(pin, 10);
+
+        await pool.query(
+            `UPDATE users
+             SET pin = $1
+             WHERE id = $2`,
+            [hashedPin, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Transaction PIN created successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+});
+
+// TRANSACTION HISTORY
+app.get("/transactions", auth, async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+    `SELECT
+        t.id,
+        s.name AS sender,
+        r.name AS receiver,
+        t.amount,
+        t.type,
+        t.created_at
+     FROM transactions t
+     JOIN users s
+        ON t.sender_id = s.id
+     JOIN users r
+        ON t.receiver_id = r.id
+     WHERE t.sender_id = $1
+        OR t.receiver_id = $1
+     ORDER BY t.created_at DESC`,
+    [req.user.id]
+);
+
+        res.json(result.rows);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+});
+
+pool.connect()
+    .then(() => {
+        console.log("✅ Connected to PostgreSQL!");
+    })
+    .catch((err) => {
+        console.log("❌ Database connection failed.");
+        console.error(err.message);
+    });
 
 app.listen(3000, () => {
     console.log("Server is running on port 3000");
