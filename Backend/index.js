@@ -5,10 +5,17 @@ const pool = require("./db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const auth = require("./middleware/auth");
+const authRoutes = require("./routes/authRoutes");
+const walletRoutes = require("./routes/walletRoutes");
+const transactionRoutes = require("./routes/transactionRoutes");
 
 const app = express();
 
 app.use(express.json());
+
+app.use(authRoutes);
+app.use(walletRoutes);
+app.use(transactionRoutes);
 
 app.get("/", (req, res) => {
     res.json({
@@ -19,7 +26,7 @@ app.get("/", (req, res) => {
 });
 
 // REGISTER USER
-app.post("/register", async (req, res) => {
+/*app.post("/register", async (req, res) => {
     const { name, email, password } = req.body;
 
     if (!name) {
@@ -74,10 +81,10 @@ app.post("/register", async (req, res) => {
             message: error.message
         });
     }
-});
+}); */
 
 // LOGIN USER
-app.post("/login", async (req, res) => {
+/*app.post("/login", async (req, res) => {
     const { email, password } = req.body;
 
     if (!email) {
@@ -141,10 +148,10 @@ app.post("/login", async (req, res) => {
             message: error.message
         });
     }
-});
+}); */
 
 // DEPOSIT MONEY
-app.post("/deposit", auth, async (req, res) => {
+/*app.post("/deposit", auth, async (req, res) => {
 
     const { amount } = req.body;
 
@@ -195,10 +202,10 @@ app.post("/deposit", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
 // TRANSFER MONEY
-app.post("/transfer", auth, async (req, res) => {
+/*app.post("/transfer", auth, async (req, res) => {
 
     const { email, amount, pin } = req.body;
 
@@ -325,6 +332,26 @@ await pool.query(
     ]
 );
 
+// Check if beneficiary already exists
+const beneficiaryResult = await pool.query(
+    `SELECT *
+     FROM beneficiaries
+     WHERE user_id = $1
+     AND beneficiary_id = $2`,
+    [req.user.id, receiver.id]
+);
+
+// Save beneficiary only if not already saved
+if (beneficiaryResult.rows.length === 0) {
+
+    await pool.query(
+        `INSERT INTO beneficiaries (user_id, beneficiary_id)
+         VALUES ($1, $2)`,
+        [req.user.id, receiver.id]
+    );
+
+}
+
 await pool.query("COMMIT");
 
 res.json({
@@ -347,7 +374,7 @@ res.json({
 
 }
 
-});
+}); */
 
 // GET ALL USERS (Protected)
 app.get("/users", auth, async (req, res) => {
@@ -372,7 +399,7 @@ app.get("/users", auth, async (req, res) => {
 });
 
 // GET LOGGED-IN USER PROFILE
-app.get("/profile", auth, async (req, res) => {
+/*app.get("/profile", auth, async (req, res) => {
 
     try {
 
@@ -399,10 +426,10 @@ app.get("/profile", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
 // CREATE TRANSACTION PIN
-app.post("/create-pin", auth, async (req, res) => {
+/*app.post("/create-pin", auth, async (req, res) => {
 
     const { pin } = req.body;
 
@@ -446,9 +473,126 @@ app.post("/create-pin", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
-// TRANSACTION HISTORY
+// CHANGE TRANSACTION PIN
+/*app.post("/change-pin", auth, async (req, res) => {
+
+    const { oldPin, newPin } = req.body;
+
+    if (!oldPin) {
+        return res.json({
+            success: false,
+            message: "Old PIN is required."
+        });
+    }
+
+    if (!newPin) {
+        return res.json({
+            success: false,
+            message: "New PIN is required."
+        });
+    }
+
+    if (!/^\d{4}$/.test(newPin)) {
+        return res.json({
+            success: false,
+            message: "New PIN must be exactly 4 digits."
+        });
+    }
+
+    try {
+
+        // Get current user
+        const result = await pool.query(
+            "SELECT pin FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        const user = result.rows[0];
+
+        // Verify old PIN
+        const pinMatch = await bcrypt.compare(oldPin, user.pin);
+
+        if (!pinMatch) {
+            return res.json({
+                success: false,
+                message: "Old PIN is incorrect."
+            });
+        }
+
+        // Prevent using the same PIN again
+        if (oldPin === newPin) {
+            return res.json({
+                success: false,
+                message: "New PIN must be different from the old PIN."
+            });
+        }
+
+        // Hash new PIN
+        const hashedPin = await bcrypt.hash(newPin, 10);
+
+        // Update database
+        await pool.query(
+            `UPDATE users
+             SET pin = $1
+             WHERE id = $2`,
+            [hashedPin, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Transaction PIN changed successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+}); */
+
+// To get wallet balance
+/*app.get("/wallet", auth, async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            `SELECT balance
+             FROM wallets
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                message: "Wallet not found."
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                balance: result.rows[0].balance
+            }
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+}); */
+
 app.get("/transactions", auth, async (req, res) => {
 
     try {
@@ -471,6 +615,45 @@ app.get("/transactions", auth, async (req, res) => {
      ORDER BY t.created_at DESC`,
     [req.user.id]
 );
+
+        res.json(result.rows);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+});
+
+// GET BENEFICIARIES
+app.get("/beneficiaries", auth, async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+
+            `SELECT
+                users.id,
+                users.name,
+                users.email,
+                beneficiaries.created_at
+
+            FROM beneficiaries
+
+            JOIN users
+            ON beneficiaries.beneficiary_id = users.id
+
+            WHERE beneficiaries.user_id = $1
+
+            ORDER BY beneficiaries.created_at DESC`,
+
+            [req.user.id]
+
+        );
 
         res.json(result.rows);
 

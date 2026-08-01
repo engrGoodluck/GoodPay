@@ -1,0 +1,296 @@
+const pool = require("../db");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+
+// User Registeration
+const register = async (req, res) => {
+
+    const { name, email, password } = req.body;
+
+    if (!name) {
+        return res.json({
+            success: false,
+            message: "Name is required."
+        });
+    }
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Email is required."
+        });
+    }
+
+    if (!password) {
+        return res.json({
+            success: false,
+            message: "Password is required."
+        });
+    }
+
+    try {
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        const userResult = await pool.query(
+            `INSERT INTO users (name, email, password)
+             VALUES ($1, $2, $3)
+             RETURNING id`,
+            [name, email, hashedPassword]
+        );
+
+        const userId = userResult.rows[0].id;
+
+        await pool.query(
+            `INSERT INTO wallets (user_id)
+             VALUES ($1)`,
+            [userId]
+        );
+
+        res.json({
+            success: true,
+            message: "User registered successfully!"
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+// LOGIN USER
+const login = async (req, res) => {
+
+    const { email, password } = req.body;
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Email is required."
+        });
+    }
+
+    if (!password) {
+        return res.json({
+            success: false,
+            message: "Password is required."
+        });
+    }
+
+    try {
+
+        const result = await pool.query(
+            "SELECT * FROM users WHERE email = $1",
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const user = result.rows[0];
+
+        const isMatch = await bcrypt.compare(password, user.password);
+
+        if (!isMatch) {
+            return res.json({
+                success: false,
+                message: "Incorrect password."
+            });
+        }
+
+        const token = jwt.sign(
+            {
+                id: user.id,
+                email: user.email
+            },
+            process.env.JWT_SECRET,
+            {
+                expiresIn: "1h"
+            }
+        );
+
+        res.json({
+            success: true,
+            message: "Login successful!",
+            token
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+// PROFILE
+const profile = async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            "SELECT id, name, email FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        res.json(result.rows[0]);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+// CREATE PIN
+const createPin = async (req, res) => {
+
+    const { pin } = req.body;
+
+    if (!pin) {
+        return res.json({
+            success: false,
+            message: "PIN is required."
+        });
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+        return res.json({
+            success: false,
+            message: "PIN must be exactly 4 digits."
+        });
+    }
+
+    try {
+
+        const hashedPin = await bcrypt.hash(pin, 10);
+
+        await pool.query(
+            `UPDATE users
+             SET pin = $1
+             WHERE id = $2`,
+            [hashedPin, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Transaction PIN created successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+// CHANGE PIN
+const changePin = async (req, res) => {
+
+    const { oldPin, newPin } = req.body;
+
+    if (!oldPin) {
+        return res.json({
+            success: false,
+            message: "Old PIN is required."
+        });
+    }
+
+    if (!newPin) {
+        return res.json({
+            success: false,
+            message: "New PIN is required."
+        });
+    }
+
+    if (!/^\d{4}$/.test(newPin)) {
+        return res.json({
+            success: false,
+            message: "New PIN must be exactly 4 digits."
+        });
+    }
+
+    try {
+
+        const result = await pool.query(
+            "SELECT pin FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        const user = result.rows[0];
+
+        const pinMatch = await bcrypt.compare(oldPin, user.pin);
+
+        if (!pinMatch) {
+            return res.json({
+                success: false,
+                message: "Old PIN is incorrect."
+            });
+        }
+
+        if (oldPin === newPin) {
+            return res.json({
+                success: false,
+                message: "New PIN must be different from the old PIN."
+            });
+        }
+
+        const hashedPin = await bcrypt.hash(newPin, 10);
+
+        await pool.query(
+            `UPDATE users
+             SET pin = $1
+             WHERE id = $2`,
+            [hashedPin, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Transaction PIN changed successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+module.exports = {
+    register,
+    login,
+    profile,
+    createPin,
+    changePin
+};
