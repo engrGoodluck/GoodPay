@@ -174,6 +174,44 @@ const transfer = async (req, res) => {
 
 };
 
+// GET TRANSACTION HISTORY
+const getTransactions = async (req, res) => {
+
+    try {
+
+        const result = await pool.query(
+            `SELECT
+                t.id,
+                s.name AS sender,
+                r.name AS receiver,
+                t.amount,
+                t.type,
+                t.created_at
+             FROM transactions t
+             JOIN users s
+                ON t.sender_id = s.id
+             JOIN users r
+                ON t.receiver_id = r.id
+             WHERE t.sender_id = $1
+                OR t.receiver_id = $1
+             ORDER BY t.created_at DESC`,
+            [req.user.id]
+        );
+
+        res.json(result.rows);
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
 module.exports = {
-    transfer
+    transfer,
+    getTransactions
 };

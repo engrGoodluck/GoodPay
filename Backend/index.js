@@ -2,12 +2,14 @@ require("dotenv").config();
 
 const express = require("express");
 const pool = require("./db");
-const bcrypt = require("bcrypt");
-const jwt = require("jsonwebtoken");
-const auth = require("./middleware/auth");
+/*const bcrypt = require("bcrypt");*/
+/*const jwt = require("jsonwebtoken");*/
+/*const auth = require("./middleware/auth");*/
 const authRoutes = require("./routes/authRoutes");
 const walletRoutes = require("./routes/walletRoutes");
 const transactionRoutes = require("./routes/transactionRoutes");
+const beneficiaryRoutes = require("./routes/beneficiaryRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 
@@ -16,6 +18,9 @@ app.use(express.json());
 app.use(authRoutes);
 app.use(walletRoutes);
 app.use(transactionRoutes);
+app.use(userRoutes);
+app.use(beneficiaryRoutes);
+
 
 app.get("/", (req, res) => {
     res.json({
@@ -377,7 +382,7 @@ res.json({
 }); */
 
 // GET ALL USERS (Protected)
-app.get("/users", auth, async (req, res) => {
+/*app.get("/users", auth, async (req, res) => {
 
     try {
 
@@ -396,7 +401,7 @@ app.get("/users", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
 // GET LOGGED-IN USER PROFILE
 /*app.get("/profile", auth, async (req, res) => {
@@ -593,7 +598,7 @@ app.get("/users", auth, async (req, res) => {
 
 }); */
 
-app.get("/transactions", auth, async (req, res) => {
+/*app.get("/transactions", auth, async (req, res) => {
 
     try {
 
@@ -627,10 +632,10 @@ app.get("/transactions", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
 // GET BENEFICIARIES
-app.get("/beneficiaries", auth, async (req, res) => {
+/*app.get("/beneficiaries", auth, async (req, res) => {
 
     try {
 
@@ -666,7 +671,7 @@ app.get("/beneficiaries", auth, async (req, res) => {
 
     }
 
-});
+}); */
 
 pool.connect()
     .then(() => {
@@ -676,6 +681,8 @@ pool.connect()
         console.log("❌ Database connection failed.");
         console.error(err.message);
     });
+
+/*app.use("/beneficiaries", beneficiaryRoutes);*/
 
 app.listen(3000, () => {
     console.log("Server is running on port 3000");
