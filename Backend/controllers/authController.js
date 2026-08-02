@@ -376,11 +376,179 @@ const changePassword = async (req, res) => {
 
 };
 
+// REQUEST PASSWORD RESET
+const forgotPassword = async (req, res) => {
+
+    const { email } = req.body;
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Email is required."
+        });
+    }
+
+    try {
+
+        const result = await pool.query(
+            "SELECT * FROM users WHERE email = $1",
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        // Generate a random 6-digit OTP
+        const otp = Math.floor(
+            100000 + Math.random() * 900000
+        ).toString();
+
+        // OTP expires in 10 minutes
+        const expiry = new Date(
+            Date.now() + 10 * 60 * 1000
+        );
+
+        await pool.query(
+            `UPDATE users
+             SET reset_otp = $1,
+                 otp_expires_at = $2
+             WHERE email = $3`,
+            [otp, expiry, email]
+        );
+
+        res.json({
+            success: true,
+            message: "Password reset OTP generated successfully.",
+            otp: otp
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
+// RESET PASSWORD USING OTP
+const resetPassword = async (req, res) => {
+
+    const {
+        email,
+        otp,
+        newPassword,
+        confirmPassword
+    } = req.body;
+
+    if (!email) {
+        return res.json({
+            success: false,
+            message: "Email is required."
+        });
+    }
+
+    if (!otp) {
+        return res.json({
+            success: false,
+            message: "OTP is required."
+        });
+    }
+
+    if (!newPassword) {
+        return res.json({
+            success: false,
+            message: "New password is required."
+        });
+    }
+
+    if (!confirmPassword) {
+        return res.json({
+            success: false,
+            message: "Please confirm your new password."
+        });
+    }
+
+    if (newPassword !== confirmPassword) {
+        return res.json({
+            success: false,
+            message: "Passwords do not match."
+        });
+    }
+
+    try {
+
+        const result = await pool.query(
+            "SELECT * FROM users WHERE email = $1",
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const user = result.rows[0];
+
+        if (user.reset_otp !== otp) {
+            return res.json({
+                success: false,
+                message: "Invalid OTP."
+            });
+        }
+
+        if (new Date() > user.otp_expires_at) {
+            return res.json({
+                success: false,
+                message: "OTP has expired."
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(
+            newPassword,
+            10
+        );
+
+        await pool.query(
+            `UPDATE users
+             SET password = $1,
+                 reset_otp = NULL,
+                 otp_expires_at = NULL
+             WHERE email = $2`,
+            [hashedPassword, email]
+        );
+
+        res.json({
+            success: true,
+            message: "Password reset successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
 module.exports = {
     register,
     login,
     profile,
     createPin,
     changePin,
-    changePassword
+    changePassword,
+    forgotPassword,
+    resetPassword
 };
