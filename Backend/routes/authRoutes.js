@@ -6,7 +6,8 @@ const {
     login,
     profile,
     createPin,
-    changePin
+    changePin,
+    changePassword
 } = require("../controllers/authController");
 
 const router = express.Router();
@@ -19,5 +20,6 @@ router.post("/login", login);
 router.get("/profile", auth, profile);
 router.post("/create-pin", auth, createPin);
 router.post("/change-pin", auth, changePin);
+router.put("/change-password", auth, changePassword);
 
 module.exports = router;

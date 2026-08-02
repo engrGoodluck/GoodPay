@@ -287,10 +287,100 @@ const changePin = async (req, res) => {
 
 };
 
+// CHANGE PASSWORD
+const changePassword = async (req, res) => {
+
+    const { oldPassword, newPassword, confirmPassword } = req.body;
+
+    if (!oldPassword) {
+        return res.json({
+            success: false,
+            message: "Old password is required."
+        });
+    }
+
+    if (!newPassword) {
+        return res.json({
+            success: false,
+            message: "New password is required."
+        });
+    }
+
+    if (!confirmPassword) {
+        return res.json({
+            success: false,
+            message: "Please confirm your new password."
+        });
+    }
+
+    if (newPassword !== confirmPassword) {
+        return res.json({
+            success: false,
+            message: "Passwords do not match."
+        });
+    }
+
+    if (oldPassword === newPassword) {
+        return res.json({
+            success: false,
+            message: "New password must be different from the old password."
+        });
+    }
+
+    try {
+
+        const result = await pool.query(
+            "SELECT password FROM users WHERE id = $1",
+            [req.user.id]
+        );
+
+        const user = result.rows[0];
+
+        const isMatch = await bcrypt.compare(
+            oldPassword,
+            user.password
+        );
+
+        if (!isMatch) {
+            return res.json({
+                success: false,
+                message: "Old password is incorrect."
+            });
+        }
+
+        const hashedPassword = await bcrypt.hash(
+            newPassword,
+            10
+        );
+
+        await pool.query(
+            `UPDATE users
+             SET password = $1
+             WHERE id = $2`,
+            [hashedPassword, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Password changed successfully."
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
 module.exports = {
     register,
     login,
     profile,
     createPin,
-    changePin
+    changePin,
+    changePassword
 };
