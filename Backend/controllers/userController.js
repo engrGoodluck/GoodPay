@@ -22,6 +22,46 @@ const getUsers = async (req, res) => {
 
 };
 
+// UPLOAD PROFILE PICTURE
+const uploadProfilePicture = async (req, res) => {
+
+    if (!req.file) {
+        return res.json({
+            success: false,
+            message: "Please upload an image."
+        });
+    }
+
+    try {
+
+        const imagePath = `/uploads/${req.file.filename}`;
+
+        await pool.query(
+            `UPDATE users
+             SET profile_picture = $1
+             WHERE id = $2`,
+            [imagePath, req.user.id]
+        );
+
+        res.json({
+            success: true,
+            message: "Profile picture uploaded successfully.",
+            data: {
+                profile_picture: imagePath
+            }
+        });
+
+    } catch (error) {
+
+        res.json({
+            success: false,
+            message: error.message
+        });
+
+    }
+
+};
+
 // UPDATE PROFILE
 const updateProfile = async (req, res) => {
 
@@ -87,5 +127,6 @@ const updateProfile = async (req, res) => {
 
 module.exports = {
     getUsers,
-    updateProfile
+    updateProfile,
+    uploadProfilePicture
 };

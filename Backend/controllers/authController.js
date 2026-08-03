@@ -1,3 +1,4 @@
+const { sendOTP } = require("../services/emailService");
 const pool = require("../db");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
@@ -420,10 +421,11 @@ const forgotPassword = async (req, res) => {
             [otp, expiry, email]
         );
 
+        await sendOTP(email, otp);
+
         res.json({
             success: true,
-            message: "Password reset OTP generated successfully.",
-            otp: otp
+            message: "Password reset OTP has been sent to your email."
         });
 
     } catch (error) {

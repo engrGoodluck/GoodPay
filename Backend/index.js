@@ -14,6 +14,7 @@ const userRoutes = require("./routes/userRoutes");
 const app = express();
 
 app.use(express.json());
+app.use("/uploads", express.static("uploads"));
 
 app.use(authRoutes);
 app.use(walletRoutes);
