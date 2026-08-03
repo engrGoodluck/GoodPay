@@ -183,14 +183,14 @@ const getTransactions = async (req, res) => {
             `SELECT
                 t.id,
                 s.name AS sender,
-                r.name AS receiver,
+                COALESCE(r.name, 'Cash Withdrawal') AS receiver,
                 t.amount,
                 t.type,
                 t.created_at
-             FROM transactions t
-             JOIN users s
+            FROM transactions t
+            JOIN users s
                 ON t.sender_id = s.id
-             JOIN users r
+            LEFT JOIN users r
                 ON t.receiver_id = r.id
              WHERE t.sender_id = $1
                 OR t.receiver_id = $1
